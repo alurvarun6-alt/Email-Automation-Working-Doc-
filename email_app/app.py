@@ -458,5 +458,8 @@ if __name__ == '__main__':
     # Ensure database is initialized
     db.init_db()
 
-    # Run in debug mode for development
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Get port from environment (Railway sets this) or default to 5000
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+
+    app.run(debug=debug, host='0.0.0.0', port=port)
