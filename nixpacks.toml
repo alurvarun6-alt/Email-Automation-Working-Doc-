@@ -1,8 +1,0 @@
-[phases.setup]
-nixPkgs = ["python311", "python311Packages.pip"]
-
-[phases.install]
-cmds = ["cd email_app && pip install -r requirements.txt"]
-
-[start]
-cmd = "cd email_app && gunicorn app:app --bind 0.0.0.0:$PORT"
