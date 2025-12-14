@@ -99,9 +99,9 @@ def test_smtp_connection(host, port, username, password, use_tls=True, use_ssl=F
     try:
         if use_ssl:
             context = ssl.create_default_context()
-            server = smtplib.SMTP_SSL(host, port, context=context, timeout=15)
+            server = smtplib.SMTP_SSL(host, port, context=context, timeout=30)
         else:
-            server = smtplib.SMTP(host, port, timeout=15)
+            server = smtplib.SMTP(host, port, timeout=30)
             server.ehlo()
             if use_tls:
                 server.starttls()
@@ -114,7 +114,11 @@ def test_smtp_connection(host, port, username, password, use_tls=True, use_ssl=F
         return False, "Authentication failed. Please check your email and password."
     except smtplib.SMTPConnectError:
         return False, f"Could not connect to {host}:{port}. Please check the server address."
+    except TimeoutError:
+        return False, f"Connection timed out on port {port}. Port 25 is often blocked by cloud hosts. Try port 587 with TLS enabled, or port 465 with SSL enabled."
     except Exception as e:
+        if 'timed out' in str(e).lower():
+            return False, f"Connection timed out on port {port}. Port 25 is often blocked by cloud hosts. Try port 587 with TLS enabled, or port 465 with SSL enabled."
         return False, f"Connection error: {str(e)}"
 
 
