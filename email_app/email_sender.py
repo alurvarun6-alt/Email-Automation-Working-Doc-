@@ -99,9 +99,9 @@ def test_smtp_connection(host, port, username, password, use_tls=True, use_ssl=F
     try:
         if use_ssl:
             context = ssl.create_default_context()
-            server = smtplib.SMTP_SSL(host, port, context=context, timeout=30)
+            server = smtplib.SMTP_SSL(host, port, context=context, timeout=20)
         else:
-            server = smtplib.SMTP(host, port, timeout=30)
+            server = smtplib.SMTP(host, port, timeout=20)
             server.ehlo()
             if use_tls:
                 server.starttls()
@@ -110,16 +110,53 @@ def test_smtp_connection(host, port, username, password, use_tls=True, use_ssl=F
         server.login(username, password)
         server.quit()
         return True, "Connection successful"
-    except smtplib.SMTPAuthenticationError:
-        return False, "Authentication failed. Please check your email and password."
-    except smtplib.SMTPConnectError:
-        return False, f"Could not connect to {host}:{port}. Please check the server address."
+    except smtplib.SMTPAuthenticationError as e:
+        return False, f"Authentication failed: {str(e)}"
+    except smtplib.SMTPConnectError as e:
+        return False, f"Could not connect to {host}:{port}: {str(e)}"
+    except smtplib.SMTPNotSupportedError as e:
+        return False, f"Server doesn't support this feature: {str(e)}"
+    except ssl.SSLError as e:
+        return False, f"SSL/TLS error: {str(e)}"
     except TimeoutError:
-        return False, f"Connection timed out on port {port}. Port 25 is often blocked by cloud hosts. Try port 587 with TLS enabled, or port 465 with SSL enabled."
-    except Exception as e:
+        return False, f"Connection timed out (port {port} may be blocked)"
+    except ConnectionRefusedError:
+        return False, f"Connection refused on port {port}"
+    except OSError as e:
         if 'timed out' in str(e).lower():
-            return False, f"Connection timed out on port {port}. Port 25 is often blocked by cloud hosts. Try port 587 with TLS enabled, or port 465 with SSL enabled."
-        return False, f"Connection error: {str(e)}"
+            return False, f"Connection timed out (port {port} may be blocked)"
+        return False, f"Network error: {str(e)}"
+    except Exception as e:
+        return False, f"Error: {type(e).__name__}: {str(e)}"
+
+
+def test_all_configurations(host, username, password):
+    """Test all common SMTP configurations and return results."""
+    configurations = [
+        # (port, use_tls, use_ssl, description)
+        (587, True, False, "Port 587 + STARTTLS (standard)"),
+        (587, False, False, "Port 587 plain (no encryption)"),
+        (465, False, True, "Port 465 + SSL (legacy secure)"),
+        (25, False, False, "Port 25 plain (often blocked)"),
+        (25, True, False, "Port 25 + STARTTLS"),
+        (2525, True, False, "Port 2525 + STARTTLS (alternative)"),
+        (2525, False, False, "Port 2525 plain"),
+        (26, False, False, "Port 26 plain (alternative to 25)"),
+    ]
+
+    results = []
+    for port, use_tls, use_ssl, description in configurations:
+        success, message = test_smtp_connection(host, port, username, password, use_tls, use_ssl)
+        results.append({
+            'port': port,
+            'use_tls': use_tls,
+            'use_ssl': use_ssl,
+            'description': description,
+            'success': success,
+            'message': message
+        })
+
+    return results
 
 
 def send_emails(smtp_config, recipients, subject, html_content, progress_callback=None):

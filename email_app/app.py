@@ -13,7 +13,7 @@ from werkzeug.utils import secure_filename
 
 import config
 import database as db
-from email_sender import test_smtp_connection, send_emails
+from email_sender import test_smtp_connection, test_all_configurations, send_emails
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -125,6 +125,122 @@ def logout():
     session.clear()
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
+
+
+@app.route('/diagnose', methods=['GET', 'POST'])
+def diagnose():
+    """Test all SMTP configurations to find what works."""
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        host = request.form.get('host', '').strip()
+
+        if not all([email, password, host]):
+            return jsonify({'error': 'Please fill in all fields'}), 400
+
+        results = test_all_configurations(host, email, password)
+        return jsonify({'results': results})
+
+    # GET request - show the diagnostic page
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>SMTP Diagnostic Tool</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+            .form-group { margin-bottom: 15px; }
+            label { display: block; margin-bottom: 5px; font-weight: bold; }
+            input { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+            button { background: #667eea; color: white; padding: 12px 24px; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+            button:hover { background: #5a6fd6; }
+            button:disabled { background: #ccc; }
+            .results { margin-top: 30px; }
+            .result { padding: 15px; margin: 10px 0; border-radius: 4px; }
+            .success { background: #d4edda; border: 1px solid #c3e6cb; }
+            .failure { background: #f8d7da; border: 1px solid #f5c6cb; }
+            .testing { background: #fff3cd; border: 1px solid #ffeeba; }
+            h1 { color: #333; }
+            .config { font-weight: bold; }
+            .message { color: #666; font-size: 14px; margin-top: 5px; }
+            .loading { text-align: center; padding: 20px; }
+        </style>
+    </head>
+    <body>
+        <h1>SMTP Diagnostic Tool</h1>
+        <p>This tool tests all common SMTP port/encryption combinations to find what works with your mail server.</p>
+
+        <form id="diagnoseForm">
+            <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" name="email" required placeholder="you@company.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" required>
+            </div>
+            <div class="form-group">
+                <label>SMTP Server</label>
+                <input type="text" name="host" required placeholder="mail.company.com">
+            </div>
+            <button type="submit" id="submitBtn">Test All Configurations</button>
+        </form>
+
+        <div class="results" id="results"></div>
+
+        <script>
+            document.getElementById('diagnoseForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const btn = document.getElementById('submitBtn');
+                const resultsDiv = document.getElementById('results');
+
+                btn.disabled = true;
+                btn.textContent = 'Testing (this takes about 2-3 minutes)...';
+                resultsDiv.innerHTML = '<div class="loading">Testing 8 different configurations... Please wait.</div>';
+
+                const formData = new FormData(this);
+
+                try {
+                    const response = await fetch('/diagnose', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+
+                    if (data.error) {
+                        resultsDiv.innerHTML = '<div class="result failure">' + data.error + '</div>';
+                    } else {
+                        let html = '<h2>Results:</h2>';
+                        let anySuccess = false;
+
+                        for (const r of data.results) {
+                            const statusClass = r.success ? 'success' : 'failure';
+                            const statusText = r.success ? 'SUCCESS' : 'FAILED';
+                            if (r.success) anySuccess = true;
+
+                            html += `<div class="result ${statusClass}">
+                                <div class="config">${statusText}: ${r.description}</div>
+                                <div class="message">${r.message}</div>
+                            </div>`;
+                        }
+
+                        if (!anySuccess) {
+                            html += '<div class="result failure"><strong>No working configuration found.</strong> The mail server may only support port 25 which is blocked by cloud providers.</div>';
+                        }
+
+                        resultsDiv.innerHTML = html;
+                    }
+                } catch (err) {
+                    resultsDiv.innerHTML = '<div class="result failure">Error: ' + err.message + '</div>';
+                }
+
+                btn.disabled = false;
+                btn.textContent = 'Test All Configurations';
+            });
+        </script>
+    </body>
+    </html>
+    '''
 
 
 # ============================================================================
