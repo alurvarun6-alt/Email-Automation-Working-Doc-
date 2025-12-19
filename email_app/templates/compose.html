@@ -125,6 +125,170 @@
         padding: 1rem;
         margin-top: 1rem;
     }
+
+    /* Input mode toggle tabs */
+    .input-mode-toggle {
+        display: flex;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .input-mode-toggle .toggle-btn {
+        flex: 1;
+        padding: 0.875rem 1rem;
+        border: none;
+        background: #f9fafb;
+        cursor: pointer;
+        font-size: 0.9375rem;
+        font-weight: 500;
+        color: #6b7280;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .input-mode-toggle .toggle-btn:first-child {
+        border-right: 1px solid #d1d5db;
+    }
+
+    .input-mode-toggle .toggle-btn:hover {
+        background: #f3f4f6;
+    }
+
+    .input-mode-toggle .toggle-btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .input-section {
+        display: none;
+    }
+
+    .input-section.active {
+        display: block;
+    }
+
+    /* Manual entry styles */
+    .recipient-row {
+        display: grid;
+        grid-template-columns: 1fr 1.5fr 1fr 40px;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+        align-items: center;
+    }
+
+    .recipient-row.header {
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: #374151;
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .recipient-row.header span:last-child {
+        visibility: hidden;
+    }
+
+    .recipient-row input {
+        padding: 0.625rem 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 0.9375rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .recipient-row input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .recipient-row input.email-input {
+        background: #fefce8;
+    }
+
+    .remove-row-btn {
+        width: 32px;
+        height: 32px;
+        border: none;
+        background: #fee2e2;
+        color: #dc2626;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+
+    .remove-row-btn:hover {
+        background: #fecaca;
+    }
+
+    .add-rows-btn {
+        margin-top: 1rem;
+        padding: 0.75rem 1.5rem;
+        background: #ecfdf5;
+        border: 1px dashed #10b981;
+        color: #059669;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.9375rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .add-rows-btn:hover {
+        background: #d1fae5;
+        border-style: solid;
+    }
+
+    .recipient-count {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin-top: 1rem;
+        padding: 0.5rem 0.75rem;
+        background: #f3f4f6;
+        border-radius: 6px;
+        display: inline-block;
+    }
+
+    .recipient-count strong {
+        color: #374151;
+    }
+
+    @media (max-width: 768px) {
+        .recipient-row {
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 1rem;
+        }
+
+        .recipient-row.header {
+            display: none;
+        }
+
+        .recipient-row input::placeholder {
+            opacity: 1;
+        }
+
+        .remove-row-btn {
+            width: 100%;
+            height: 36px;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -210,19 +374,60 @@
     <div class="card">
         <h2 class="card-title" style="margin-bottom: 1.5rem;">3. Recipients</h2>
 
-        <div class="form-group">
-            <label class="form-label">Upload CSV File</label>
-            <div class="file-upload" id="file_upload">
-                <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
-                <div id="file_label">
-                    <p style="font-size: 1.25rem; margin-bottom: 0.5rem;">&#128206;</p>
-                    <p><strong>Click to upload</strong> or drag and drop</p>
-                    <p style="font-size: 0.875rem; color: #6b7280;">CSV file with Name, Email, Company columns</p>
+        <!-- Input mode toggle -->
+        <input type="hidden" name="input_mode" id="input_mode" value="csv">
+
+        <div class="input-mode-toggle">
+            <button type="button" class="toggle-btn active" data-mode="csv">
+                <span>&#128206;</span> Upload CSV File
+            </button>
+            <button type="button" class="toggle-btn" data-mode="manual">
+                <span>&#9997;</span> Enter Manually
+            </button>
+        </div>
+
+        <!-- CSV Upload Section -->
+        <div class="input-section active" id="csv-section">
+            <div class="form-group">
+                <div class="file-upload" id="file_upload">
+                    <input type="file" name="csv_file" id="csv_file" accept=".csv">
+                    <div id="file_label">
+                        <p style="font-size: 1.25rem; margin-bottom: 0.5rem;">&#128206;</p>
+                        <p><strong>Click to upload</strong> or drag and drop</p>
+                        <p style="font-size: 0.875rem; color: #6b7280;">CSV file with Name, Email, Company columns</p>
+                    </div>
                 </div>
+                <p class="form-hint" style="margin-top: 0.5rem;">
+                    Required column: <strong>Email</strong>. Optional: <strong>Name</strong>, <strong>Company</strong>
+                </p>
             </div>
-            <p class="form-hint" style="margin-top: 0.5rem;">
-                Required column: <strong>Email</strong>. Optional: <strong>Name</strong>, <strong>Company</strong>
-            </p>
+        </div>
+
+        <!-- Manual Entry Section -->
+        <div class="input-section" id="manual-section">
+            <div class="placeholder-hint" style="margin-bottom: 1.5rem;">
+                <strong>Tip:</strong> Enter your recipients below. Only <strong>Email</strong> is required.
+                Name and Company are optional but help personalize your emails.
+            </div>
+
+            <div class="recipient-row header">
+                <span>Name</span>
+                <span>Email *</span>
+                <span>Company</span>
+                <span></span>
+            </div>
+
+            <div id="recipients-container">
+                <!-- Initial 5 rows will be added by JavaScript -->
+            </div>
+
+            <button type="button" class="add-rows-btn" id="add-rows-btn">
+                <span>&#43;</span> Add 5 More Recipients
+            </button>
+
+            <div class="recipient-count" id="recipient-count">
+                <strong>0</strong> recipients with valid emails
+            </div>
         </div>
     </div>
 
@@ -350,7 +555,108 @@
         }
     });
 
-    // File upload handling
+    // ============================================================================
+    // Input Mode Toggle (CSV vs Manual Entry)
+    // ============================================================================
+    const inputModeInput = document.getElementById('input_mode');
+    const toggleBtns = document.querySelectorAll('.input-mode-toggle .toggle-btn');
+    const csvSection = document.getElementById('csv-section');
+    const manualSection = document.getElementById('manual-section');
+
+    toggleBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const mode = this.dataset.mode;
+            inputModeInput.value = mode;
+
+            // Update button states
+            toggleBtns.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            // Show/hide sections
+            if (mode === 'csv') {
+                csvSection.classList.add('active');
+                manualSection.classList.remove('active');
+            } else {
+                csvSection.classList.remove('active');
+                manualSection.classList.add('active');
+            }
+        });
+    });
+
+    // ============================================================================
+    // Manual Entry - Recipient Rows Management
+    // ============================================================================
+    const recipientsContainer = document.getElementById('recipients-container');
+    const addRowsBtn = document.getElementById('add-rows-btn');
+    const recipientCountEl = document.getElementById('recipient-count');
+    let rowCounter = 0;
+
+    function createRecipientRow() {
+        rowCounter++;
+        const row = document.createElement('div');
+        row.className = 'recipient-row';
+        row.dataset.rowId = rowCounter;
+        row.innerHTML = `
+            <input type="text" name="manual_name_${rowCounter}" placeholder="Name (optional)" class="name-input">
+            <input type="email" name="manual_email_${rowCounter}" placeholder="Email address *" class="email-input" oninput="updateRecipientCount()">
+            <input type="text" name="manual_company_${rowCounter}" placeholder="Company (optional)" class="company-input">
+            <button type="button" class="remove-row-btn" onclick="removeRow(this)" title="Remove row">&times;</button>
+        `;
+        return row;
+    }
+
+    function addRecipientRows(count) {
+        for (let i = 0; i < count; i++) {
+            recipientsContainer.appendChild(createRecipientRow());
+        }
+    }
+
+    function removeRow(btn) {
+        const row = btn.closest('.recipient-row');
+        row.remove();
+        updateRecipientCount();
+
+        // Ensure at least one row exists
+        if (recipientsContainer.children.length === 0) {
+            addRecipientRows(1);
+        }
+    }
+
+    // Make removeRow available globally for onclick
+    window.removeRow = removeRow;
+
+    function updateRecipientCount() {
+        const emailInputs = recipientsContainer.querySelectorAll('.email-input');
+        let validCount = 0;
+
+        emailInputs.forEach(input => {
+            const email = input.value.trim();
+            if (email && isValidEmail(email)) {
+                validCount++;
+            }
+        });
+
+        recipientCountEl.innerHTML = `<strong>${validCount}</strong> recipient${validCount !== 1 ? 's' : ''} with valid emails`;
+    }
+
+    // Make updateRecipientCount available globally for oninput
+    window.updateRecipientCount = updateRecipientCount;
+
+    function isValidEmail(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+
+    addRowsBtn.addEventListener('click', function() {
+        addRecipientRows(5);
+    });
+
+    // Initialize with 5 rows
+    addRecipientRows(5);
+
+    // ============================================================================
+    // File Upload Handling
+    // ============================================================================
     const fileUpload = document.getElementById('file_upload');
     const fileInput = document.getElementById('csv_file');
     const fileLabel = document.getElementById('file_label');
@@ -386,12 +692,16 @@
         }
     }
 
-    // Save template toggle
+    // ============================================================================
+    // Save Template Toggle
+    // ============================================================================
     document.getElementById('save_template').addEventListener('change', function() {
         document.getElementById('template_name_field').style.display = this.checked ? 'block' : 'none';
     });
 
-    // Preview functionality
+    // ============================================================================
+    // Preview Functionality
+    // ============================================================================
     document.getElementById('preview_btn').addEventListener('click', async function() {
         const htmlContent = quill.root.innerHTML;
 
@@ -422,15 +732,38 @@
         }
     });
 
-    // Form submission
+    // ============================================================================
+    // Form Submission
+    // ============================================================================
     document.getElementById('composeForm').addEventListener('submit', function(e) {
         document.getElementById('html_content').value = quill.root.innerHTML;
 
-        // Validate
-        if (!fileInput.files.length) {
-            e.preventDefault();
-            alert('Please upload a CSV file with recipients.');
-            return;
+        const inputMode = inputModeInput.value;
+
+        // Validate based on input mode
+        if (inputMode === 'csv') {
+            if (!fileInput.files.length) {
+                e.preventDefault();
+                alert('Please upload a CSV file with recipients.');
+                return;
+            }
+        } else {
+            // Manual entry mode - check for at least one valid email
+            const emailInputs = recipientsContainer.querySelectorAll('.email-input');
+            let validEmails = 0;
+
+            emailInputs.forEach(input => {
+                const email = input.value.trim();
+                if (email && isValidEmail(email)) {
+                    validEmails++;
+                }
+            });
+
+            if (validEmails === 0) {
+                e.preventDefault();
+                alert('Please enter at least one valid email address.');
+                return;
+            }
         }
 
         const saveTemplate = document.getElementById('save_template').checked;

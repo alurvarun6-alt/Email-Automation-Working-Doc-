@@ -1,5 +1,6 @@
 import os
 import io
+import re
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
@@ -376,69 +377,94 @@ def compose_preview():
 @app.route('/compose/send', methods=['POST'])
 @login_required
 def compose_send():
-    """Parse CSV and send emails."""
+    """Parse recipients (CSV or manual entry) and send emails."""
     campaign_name = request.form.get('campaign_name', '').strip()
     subject = request.form.get('subject', '').strip()
     html_content = request.form.get('html_content', '')
     save_template = request.form.get('save_template') == 'on'
     template_name = request.form.get('template_name', '').strip()
+    input_mode = request.form.get('input_mode', 'csv')
 
     # Validate required fields
     if not campaign_name or not subject:
         flash('Campaign name and subject are required.', 'error')
         return redirect(url_for('compose'))
 
-    # Handle CSV file
-    if 'csv_file' not in request.files:
-        flash('Please upload a CSV file with recipients.', 'error')
-        return redirect(url_for('compose'))
+    recipients = []
 
-    csv_file = request.files['csv_file']
-    if csv_file.filename == '':
-        flash('Please select a CSV file.', 'error')
-        return redirect(url_for('compose'))
-
-    if not allowed_file(csv_file.filename, config.ALLOWED_CSV_EXTENSIONS):
-        flash('Please upload a valid CSV file.', 'error')
-        return redirect(url_for('compose'))
-
-    # Parse CSV
-    try:
-        csv_content = csv_file.read().decode('utf-8')
-        df = pd.read_csv(io.StringIO(csv_content))
-        df.columns = df.columns.str.strip().str.lower()
-
-        # Validate required column
-        if 'email' not in df.columns:
-            flash('CSV must have an "Email" column.', 'error')
+    if input_mode == 'csv':
+        # Handle CSV file upload
+        if 'csv_file' not in request.files:
+            flash('Please upload a CSV file with recipients.', 'error')
             return redirect(url_for('compose'))
 
-        # Clean and prepare recipients
-        recipients = []
-        for _, row in df.iterrows():
-            email = str(row.get('email', '')).strip()
-            if not email or email == 'nan':
-                continue
-
-            name = str(row.get('name', '')).strip()
-            if name == 'nan':
-                name = ''
-            company = str(row.get('company', '')).strip()
-            if company == 'nan':
-                company = ''
-
-            recipients.append({
-                'email': email,
-                'name': name,
-                'company': company
-            })
-
-        if not recipients:
-            flash('No valid email addresses found in CSV.', 'error')
+        csv_file = request.files['csv_file']
+        if csv_file.filename == '':
+            flash('Please select a CSV file.', 'error')
             return redirect(url_for('compose'))
 
-    except Exception as e:
-        flash(f'Error parsing CSV: {str(e)}', 'error')
+        if not allowed_file(csv_file.filename, config.ALLOWED_CSV_EXTENSIONS):
+            flash('Please upload a valid CSV file.', 'error')
+            return redirect(url_for('compose'))
+
+        # Parse CSV
+        try:
+            csv_content = csv_file.read().decode('utf-8')
+            df = pd.read_csv(io.StringIO(csv_content))
+            df.columns = df.columns.str.strip().str.lower()
+
+            # Validate required column
+            if 'email' not in df.columns:
+                flash('CSV must have an "Email" column.', 'error')
+                return redirect(url_for('compose'))
+
+            # Clean and prepare recipients
+            for _, row in df.iterrows():
+                email = str(row.get('email', '')).strip()
+                if not email or email == 'nan':
+                    continue
+
+                name = str(row.get('name', '')).strip()
+                if name == 'nan':
+                    name = ''
+                company = str(row.get('company', '')).strip()
+                if company == 'nan':
+                    company = ''
+
+                recipients.append({
+                    'email': email,
+                    'name': name,
+                    'company': company
+                })
+
+        except Exception as e:
+            flash(f'Error parsing CSV: {str(e)}', 'error')
+            return redirect(url_for('compose'))
+
+    else:
+        # Handle manual entry
+        # Parse all manual_email_* fields from the form
+        email_regex = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+
+        for key in request.form:
+            if key.startswith('manual_email_'):
+                row_id = key.replace('manual_email_', '')
+                email = request.form.get(f'manual_email_{row_id}', '').strip()
+
+                if not email or not email_regex.match(email):
+                    continue
+
+                name = request.form.get(f'manual_name_{row_id}', '').strip()
+                company = request.form.get(f'manual_company_{row_id}', '').strip()
+
+                recipients.append({
+                    'email': email,
+                    'name': name,
+                    'company': company
+                })
+
+    if not recipients:
+        flash('No valid email addresses found. Please add recipients.', 'error')
         return redirect(url_for('compose'))
 
     # Save template if requested
