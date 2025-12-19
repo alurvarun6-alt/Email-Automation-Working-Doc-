@@ -293,6 +293,51 @@
     quill.root.innerHTML = {{ selected_template.html_content|tojson }};
     {% endif %}
 
+    // Compress/resize image before upload
+    async function compressImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.85) {
+        return new Promise((resolve) => {
+            // If file is already small (under 2MB), don't compress
+            if (file.size < 2 * 1024 * 1024) {
+                resolve(file);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    let width = img.width;
+                    let height = img.height;
+
+                    // Calculate new dimensions
+                    if (width > maxWidth || height > maxHeight) {
+                        const ratio = Math.min(maxWidth / width, maxHeight / height);
+                        width = Math.round(width * ratio);
+                        height = Math.round(height * ratio);
+                    }
+
+                    // Create canvas and draw resized image
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convert to blob
+                    canvas.toBlob(function(blob) {
+                        const compressedFile = new File([blob], file.name, {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        });
+                        resolve(compressedFile);
+                    }, 'image/jpeg', quality);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
     // Handle image upload
     quill.getModule('toolbar').addHandler('image', function() {
         const input = document.createElement('input');
@@ -303,10 +348,13 @@
         input.onchange = async function() {
             const file = input.files[0];
             if (file) {
-                const formData = new FormData();
-                formData.append('image', file);
-
                 try {
+                    // Compress image if needed
+                    const processedFile = await compressImage(file);
+
+                    const formData = new FormData();
+                    formData.append('image', processedFile);
+
                     const response = await fetch('/upload/image', {
                         method: 'POST',
                         body: formData,
