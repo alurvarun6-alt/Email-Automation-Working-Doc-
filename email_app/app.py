@@ -597,6 +597,13 @@ def api_get_template(template_id):
 
 @app.errorhandler(413)
 def too_large(e):
+    # Check if this is an AJAX request (like image upload from Quill)
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+              request.accept_mimetypes.best == 'application/json'
+
+    if is_ajax:
+        return jsonify({'error': 'File is too large. Maximum size is 16MB.'}), 413
+
     flash('File is too large. Maximum size is 16MB.', 'error')
     return redirect(request.url)
 
