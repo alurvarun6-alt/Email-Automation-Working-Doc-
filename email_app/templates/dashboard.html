@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Email Automation{% endblock %}
+
+{% block content %}
+<div class="card-header" style="margin-bottom: 2rem;">
+    <div>
+        <h1 class="card-title" style="font-size: 1.75rem;">Dashboard</h1>
+        <p style="color: #6b7280; margin-top: 0.25rem;">Welcome back! Manage your email campaigns here.</p>
+    </div>
+    <a href="{{ url_for('compose') }}" class="btn btn-primary">
+        + New Campaign
+    </a>
+</div>
+
+<!-- Quick Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ campaigns|length }}</div>
+        <div class="stat-label">Total Campaigns</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ templates|length }}</div>
+        <div class="stat-label">Saved Templates</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">
+            {{ campaigns|sum(attribute='sent_count') if campaigns else 0 }}
+        </div>
+        <div class="stat-label">Emails Sent</div>
+    </div>
+</div>
+
+<!-- Recent Campaigns -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Recent Campaigns</h2>
+    </div>
+
+    {% if campaigns %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Campaign Name</th>
+                <th>Subject</th>
+                <th>Status</th>
+                <th>Sent / Total</th>
+                <th>Date</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for campaign in campaigns[:10] %}
+            <tr>
+                <td><strong>{{ campaign.name }}</strong></td>
+                <td>{{ campaign.subject[:40] }}{% if campaign.subject|length > 40 %}...{% endif %}</td>
+                <td>
+                    {% if campaign.status == 'completed' %}
+                        {% if campaign.failed_count == 0 %}
+                            <span class="badge badge-success">Completed</span>
+                        {% else %}
+                            <span class="badge badge-error">{{ campaign.failed_count }} Failed</span>
+                        {% endif %}
+                    {% elif campaign.status == 'sending' %}
+                        <span class="badge badge-sending">Sending...</span>
+                    {% else %}
+                        <span class="badge badge-pending">Pending</span>
+                    {% endif %}
+                </td>
+                <td>{{ campaign.sent_count }} / {{ campaign.total_recipients }}</td>
+                <td>{{ campaign.created_at[:10] if campaign.created_at else '-' }}</td>
+                <td>
+                    <a href="{{ url_for('campaign_results', campaign_id=campaign.id) }}" class="btn btn-secondary btn-sm">
+                        View
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">&#128231;</div>
+        <p>No campaigns yet. Create your first campaign to get started!</p>
+        <a href="{{ url_for('compose') }}" class="btn btn-primary" style="margin-top: 1rem;">
+            Create Campaign
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Saved Templates -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Saved Templates</h2>
+        <a href="{{ url_for('template_new') }}" class="btn btn-secondary btn-sm">
+            + New Template
+        </a>
+    </div>
+
+    {% if templates %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Template Name</th>
+                <th>Subject</th>
+                <th>Last Updated</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for template in templates[:5] %}
+            <tr>
+                <td><strong>{{ template.name }}</strong></td>
+                <td>{{ template.subject[:50] }}{% if template.subject|length > 50 %}...{% endif %}</td>
+                <td>{{ template.updated_at[:10] if template.updated_at else '-' }}</td>
+                <td>
+                    <a href="{{ url_for('compose', template_id=template.id) }}" class="btn btn-primary btn-sm">
+                        Use
+                    </a>
+                    <a href="{{ url_for('template_edit', template_id=template.id) }}" class="btn btn-secondary btn-sm">
+                        Edit
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if templates|length > 5 %}
+    <div style="text-align: center; padding-top: 1rem;">
+        <a href="{{ url_for('templates_list') }}" class="btn btn-secondary btn-sm">
+            View All Templates
+        </a>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">&#128196;</div>
+        <p>No templates saved yet. Create a template to reuse it across campaigns!</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Campaign Results - Email Automation{% endblock %}
+
+{% block content %}
+<div class="card-header" style="margin-bottom: 2rem;">
+    <div>
+        <h1 class="card-title" style="font-size: 1.75rem;">{{ campaign.name }}</h1>
+        <p style="color: #6b7280; margin-top: 0.25rem;">
+            Campaign sent on {{ campaign.created_at[:10] if campaign.created_at else 'N/A' }}
+        </p>
+    </div>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+        Back to Dashboard
+    </a>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ campaign.total_recipients }}</div>
+        <div class="stat-label">Total Recipients</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: #10b981;">{{ campaign.sent_count }}</div>
+        <div class="stat-label">Successfully Sent</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: #ef4444;">{{ campaign.failed_count }}</div>
+        <div class="stat-label">Failed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">
+            {% if campaign.total_recipients > 0 %}
+                {{ ((campaign.sent_count / campaign.total_recipients) * 100)|round(1) }}%
+            {% else %}
+                0%
+            {% endif %}
+        </div>
+        <div class="stat-label">Success Rate</div>
+    </div>
+</div>
+
+<!-- Campaign Details -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Campaign Details</h2>
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.75rem 1.5rem;">
+        <strong>Subject:</strong>
+        <span>{{ campaign.subject }}</span>
+
+        <strong>Status:</strong>
+        <span>
+            {% if campaign.status == 'completed' %}
+                {% if campaign.failed_count == 0 %}
+                    <span class="badge badge-success">Completed Successfully</span>
+                {% else %}
+                    <span class="badge badge-error">Completed with {{ campaign.failed_count }} errors</span>
+                {% endif %}
+            {% elif campaign.status == 'sending' %}
+                <span class="badge badge-sending">Sending in progress...</span>
+            {% else %}
+                <span class="badge badge-pending">{{ campaign.status }}</span>
+            {% endif %}
+        </span>
+
+        <strong>Created:</strong>
+        <span>{{ campaign.created_at if campaign.created_at else 'N/A' }}</span>
+
+        {% if campaign.completed_at %}
+        <strong>Completed:</strong>
+        <span>{{ campaign.completed_at }}</span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Recipients Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Recipients</h2>
+        <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary btn-sm" onclick="filterRecipients('all')">All</button>
+            <button class="btn btn-secondary btn-sm" onclick="filterRecipients('sent')">Sent</button>
+            <button class="btn btn-secondary btn-sm" onclick="filterRecipients('failed')">Failed</button>
+        </div>
+    </div>
+
+    <div style="overflow-x: auto;">
+        <table class="table" id="recipients_table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Company</th>
+                    <th>Status</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for recipient in recipients %}
+                <tr data-status="{{ recipient.status }}">
+                    <td>{{ recipient.name or '-' }}</td>
+                    <td>{{ recipient.email }}</td>
+                    <td>{{ recipient.company or '-' }}</td>
+                    <td>
+                        {% if recipient.status == 'sent' %}
+                            <span class="badge badge-success">Sent</span>
+                        {% elif recipient.status == 'failed' %}
+                            <span class="badge badge-error">Failed</span>
+                        {% else %}
+                            <span class="badge badge-pending">{{ recipient.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                        title="{{ recipient.error_message or '' }}">
+                        {{ recipient.error_message or '-' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Actions -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Actions</h2>
+    </div>
+    <div style="display: flex; gap: 1rem;">
+        <a href="{{ url_for('compose') }}" class="btn btn-primary">
+            Create New Campaign
+        </a>
+        {% if campaign.failed_count > 0 %}
+        <button class="btn btn-secondary" onclick="exportFailed()">
+            Export Failed Recipients
+        </button>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function filterRecipients(status) {
+        const rows = document.querySelectorAll('#recipients_table tbody tr');
+        rows.forEach(row => {
+            if (status === 'all') {
+                row.style.display = '';
+            } else {
+                row.style.display = row.dataset.status === status ? '' : 'none';
+            }
+        });
+    }
+
+    function exportFailed() {
+        const rows = document.querySelectorAll('#recipients_table tbody tr[data-status="failed"]');
+        let csv = 'Name,Email,Company,Error\n';
+
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            const name = cells[0].textContent.trim();
+            const email = cells[1].textContent.trim();
+            const company = cells[2].textContent.trim();
+            const error = cells[4].getAttribute('title') || '';
+
+            csv += `"${name}","${email}","${company}","${error}"\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'failed_recipients.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+</script>
+{% endblock %}
