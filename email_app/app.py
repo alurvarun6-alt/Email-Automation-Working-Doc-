@@ -1,5 +1,6 @@
 import os
 import io
+import base64
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
@@ -516,7 +517,7 @@ def campaign_results(campaign_id):
 @app.route('/upload/image', methods=['POST'])
 @login_required
 def upload_image():
-    """Handle image upload from Quill editor."""
+    """Handle image upload from Quill editor - returns base64 for email embedding."""
     if 'image' not in request.files:
         return jsonify({'error': 'No image file'}), 400
 
@@ -527,18 +528,25 @@ def upload_image():
     if not allowed_file(file.filename, config.ALLOWED_IMAGE_EXTENSIONS):
         return jsonify({'error': 'Invalid file type'}), 400
 
-    # Generate unique filename
-    original_name = secure_filename(file.filename)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"{timestamp}_{original_name}"
+    # Read file and convert to base64
+    file_data = file.read()
 
-    # Save file
-    filepath = config.IMAGE_FOLDER / filename
-    file.save(filepath)
+    # Determine MIME type
+    filename_lower = file.filename.lower()
+    if filename_lower.endswith('.png'):
+        mime_type = 'image/png'
+    elif filename_lower.endswith('.gif'):
+        mime_type = 'image/gif'
+    elif filename_lower.endswith('.webp'):
+        mime_type = 'image/webp'
+    else:
+        mime_type = 'image/jpeg'
 
-    # Return URL for Quill
-    image_url = url_for('uploaded_image', filename=filename)
-    return jsonify({'url': image_url})
+    # Create base64 data URL (embeds image directly in email)
+    base64_data = base64.b64encode(file_data).decode('utf-8')
+    data_url = f"data:{mime_type};base64,{base64_data}"
+
+    return jsonify({'url': data_url})
 
 
 @app.route('/uploads/images/<filename>')
