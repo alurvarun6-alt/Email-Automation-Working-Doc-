@@ -125,6 +125,117 @@
         padding: 1rem;
         margin-top: 1rem;
     }
+
+    /* Image upload overlay styles */
+    .upload-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    .upload-overlay.hidden {
+        display: none;
+    }
+
+    .upload-progress-card {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        min-width: 320px;
+        max-width: 400px;
+        text-align: center;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+
+    .upload-progress-card h3 {
+        margin: 0 0 1rem 0;
+        color: #374151;
+    }
+
+    .progress-bar-container {
+        width: 100%;
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 0.5rem;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        border-radius: 4px;
+        transition: width 0.3s ease;
+        width: 0%;
+    }
+
+    .progress-bar.indeterminate {
+        width: 30%;
+        animation: indeterminate 1.5s infinite ease-in-out;
+    }
+
+    @keyframes indeterminate {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(400%); }
+    }
+
+    .upload-status {
+        color: #6b7280;
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+    }
+
+    .upload-error {
+        color: #dc2626;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+        text-align: left;
+    }
+
+    .upload-error-title {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .upload-error-hint {
+        font-size: 0.875rem;
+        color: #991b1b;
+    }
+
+    .retry-btn {
+        margin-top: 1rem;
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .retry-btn:hover {
+        background: #5a6fd6;
+    }
+
+    .cancel-btn {
+        margin-top: 1rem;
+        margin-left: 0.5rem;
+        background: #6b7280;
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -267,6 +378,25 @@
         <div class="preview-body" id="preview_body"></div>
     </div>
 </div>
+
+<!-- Image Upload Progress Overlay -->
+<div class="upload-overlay hidden" id="upload_overlay">
+    <div class="upload-progress-card">
+        <h3 id="upload_title">Uploading Image...</h3>
+        <div class="progress-bar-container">
+            <div class="progress-bar indeterminate" id="upload_progress_bar"></div>
+        </div>
+        <div class="upload-status" id="upload_status">Preparing upload...</div>
+        <div class="upload-error hidden" id="upload_error">
+            <div class="upload-error-title" id="upload_error_title">Upload Failed</div>
+            <div class="upload-error-hint" id="upload_error_hint"></div>
+        </div>
+        <div id="upload_buttons" class="hidden">
+            <button class="retry-btn" id="upload_retry_btn">Retry</button>
+            <button class="cancel-btn" id="upload_cancel_btn">Cancel</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -293,35 +423,249 @@
     quill.root.innerHTML = {{ selected_template.html_content|tojson }};
     {% endif %}
 
-    // Handle image upload
+    // ============================================================================
+    // Robust Image Upload Handler with Retry Logic and Progress Indication
+    // ============================================================================
+
+    const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+    const MAX_FILE_SIZE_MB = 10;
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [1000, 2000, 4000]; // Exponential backoff in ms
+
+    // Error code to user-friendly message mapping
+    const ERROR_HINTS = {
+        'NO_FILE': 'Please select an image file to upload.',
+        'EMPTY_FILENAME': 'The file appears to have no name. Please try a different file.',
+        'INVALID_TYPE': 'Please use PNG, JPG, GIF, or WebP images only.',
+        'EMPTY_FILE': 'The file is empty or corrupted. Please try a different file.',
+        'FILE_TOO_LARGE': 'Try compressing the image or using a smaller file.',
+        'DISK_FULL': 'The server is temporarily full. Please try again in a few minutes.',
+        'INVALID_CONTENT': 'The file may be corrupted or not a real image. Please try a different file.',
+        'INVALID_IMAGE': 'The image file appears to be damaged. Please try a different file.',
+        'PERMISSION_DENIED': 'Server configuration issue. Please contact support.',
+        'SAVE_FAILED': 'Temporary server issue. Click Retry to try again.',
+        'UNKNOWN_ERROR': 'Something went wrong. Click Retry to try again.',
+        'NETWORK_ERROR': 'Check your internet connection and try again.',
+        'SESSION_EXPIRED': 'Your session has expired. Please log in again.'
+    };
+
+    // Upload state
+    let currentUploadFile = null;
+    let uploadAbortController = null;
+
+    // UI Elements
+    const uploadOverlay = document.getElementById('upload_overlay');
+    const uploadTitle = document.getElementById('upload_title');
+    const uploadProgressBar = document.getElementById('upload_progress_bar');
+    const uploadStatus = document.getElementById('upload_status');
+    const uploadError = document.getElementById('upload_error');
+    const uploadErrorTitle = document.getElementById('upload_error_title');
+    const uploadErrorHint = document.getElementById('upload_error_hint');
+    const uploadButtons = document.getElementById('upload_buttons');
+    const uploadRetryBtn = document.getElementById('upload_retry_btn');
+    const uploadCancelBtn = document.getElementById('upload_cancel_btn');
+
+    function showUploadOverlay() {
+        uploadOverlay.classList.remove('hidden');
+        uploadError.classList.add('hidden');
+        uploadButtons.classList.add('hidden');
+        uploadProgressBar.classList.add('indeterminate');
+        uploadTitle.textContent = 'Uploading Image...';
+        uploadStatus.textContent = 'Preparing upload...';
+    }
+
+    function hideUploadOverlay() {
+        uploadOverlay.classList.add('hidden');
+        currentUploadFile = null;
+        if (uploadAbortController) {
+            uploadAbortController.abort();
+            uploadAbortController = null;
+        }
+    }
+
+    function showUploadError(errorMessage, errorCode, canRetry) {
+        uploadProgressBar.classList.remove('indeterminate');
+        uploadProgressBar.style.width = '0%';
+        uploadError.classList.remove('hidden');
+        uploadErrorTitle.textContent = errorMessage;
+        uploadErrorHint.textContent = ERROR_HINTS[errorCode] || ERROR_HINTS['UNKNOWN_ERROR'];
+
+        if (canRetry) {
+            uploadButtons.classList.remove('hidden');
+        }
+    }
+
+    function updateUploadStatus(message, progress = null) {
+        uploadStatus.textContent = message;
+        if (progress !== null) {
+            uploadProgressBar.classList.remove('indeterminate');
+            uploadProgressBar.style.width = `${progress}%`;
+        }
+    }
+
+    // Client-side file validation
+    function validateFileClient(file) {
+        // Check file type
+        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+            return {
+                valid: false,
+                error: `Invalid file type: ${file.type || 'unknown'}`,
+                code: 'INVALID_TYPE'
+            };
+        }
+
+        // Check file size
+        const fileSizeMB = file.size / (1024 * 1024);
+        if (fileSizeMB > MAX_FILE_SIZE_MB) {
+            return {
+                valid: false,
+                error: `File too large (${fileSizeMB.toFixed(1)}MB). Maximum is ${MAX_FILE_SIZE_MB}MB`,
+                code: 'FILE_TOO_LARGE'
+            };
+        }
+
+        // Check for empty file
+        if (file.size === 0) {
+            return {
+                valid: false,
+                error: 'File is empty',
+                code: 'EMPTY_FILE'
+            };
+        }
+
+        return { valid: true };
+    }
+
+    // Upload with retry logic
+    async function uploadImageWithRetry(file, retryCount = 0) {
+        const formData = new FormData();
+        formData.append('image', file);
+
+        uploadAbortController = new AbortController();
+
+        try {
+            updateUploadStatus(`Uploading... (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+
+            const response = await fetch('/upload/image', {
+                method: 'POST',
+                body: formData,
+                signal: uploadAbortController.signal
+            });
+
+            const data = await response.json();
+
+            // Check for session expiration
+            if (response.status === 401) {
+                return {
+                    success: false,
+                    error: data.error || 'Session expired',
+                    code: 'SESSION_EXPIRED',
+                    canRetry: false
+                };
+            }
+
+            // Check for success
+            if (response.ok && data.url) {
+                return {
+                    success: true,
+                    url: data.url,
+                    filename: data.filename,
+                    dimensions: data.dimensions
+                };
+            }
+
+            // Check if we should retry
+            const canRetry = data.retry === true && retryCount < MAX_RETRIES;
+
+            if (canRetry) {
+                updateUploadStatus(`Retrying in ${RETRY_DELAYS[retryCount] / 1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[retryCount]));
+                return uploadImageWithRetry(file, retryCount + 1);
+            }
+
+            return {
+                success: false,
+                error: data.error || 'Upload failed',
+                code: data.code || 'UNKNOWN_ERROR',
+                canRetry: retryCount < MAX_RETRIES
+            };
+
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                return { success: false, error: 'Upload cancelled', code: 'CANCELLED', canRetry: false };
+            }
+
+            // Network errors - retry if possible
+            if (retryCount < MAX_RETRIES) {
+                updateUploadStatus(`Network error. Retrying in ${RETRY_DELAYS[retryCount] / 1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[retryCount]));
+                return uploadImageWithRetry(file, retryCount + 1);
+            }
+
+            return {
+                success: false,
+                error: 'Network error: ' + err.message,
+                code: 'NETWORK_ERROR',
+                canRetry: true
+            };
+        }
+    }
+
+    // Main upload handler
+    async function handleImageUpload(file) {
+        currentUploadFile = file;
+
+        // Client-side validation
+        const validation = validateFileClient(file);
+        if (!validation.valid) {
+            showUploadError(validation.error, validation.code, false);
+            return;
+        }
+
+        showUploadOverlay();
+        updateUploadStatus('Uploading...');
+
+        const result = await uploadImageWithRetry(file);
+
+        if (result.success) {
+            updateUploadStatus('Upload complete!', 100);
+
+            // Insert image into editor
+            const range = quill.getSelection(true);
+            quill.insertEmbed(range.index, 'image', result.url);
+            quill.setSelection(range.index + 1);
+
+            // Hide overlay after brief success display
+            setTimeout(hideUploadOverlay, 500);
+        } else if (result.code !== 'CANCELLED') {
+            showUploadError(result.error, result.code, result.canRetry);
+        }
+    }
+
+    // Retry button handler
+    uploadRetryBtn.addEventListener('click', function() {
+        if (currentUploadFile) {
+            uploadError.classList.add('hidden');
+            uploadButtons.classList.add('hidden');
+            uploadProgressBar.classList.add('indeterminate');
+            handleImageUpload(currentUploadFile);
+        }
+    });
+
+    // Cancel button handler
+    uploadCancelBtn.addEventListener('click', hideUploadOverlay);
+
+    // Handle image upload from Quill toolbar
     quill.getModule('toolbar').addHandler('image', function() {
         const input = document.createElement('input');
         input.setAttribute('type', 'file');
-        input.setAttribute('accept', 'image/*');
+        input.setAttribute('accept', 'image/png,image/jpeg,image/gif,image/webp');
         input.click();
 
-        input.onchange = async function() {
+        input.onchange = function() {
             const file = input.files[0];
             if (file) {
-                const formData = new FormData();
-                formData.append('image', file);
-
-                try {
-                    const response = await fetch('/upload/image', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    const data = await response.json();
-
-                    if (data.url) {
-                        const range = quill.getSelection(true);
-                        quill.insertEmbed(range.index, 'image', data.url);
-                    } else {
-                        alert('Error uploading image: ' + (data.error || 'Unknown error'));
-                    }
-                } catch (err) {
-                    alert('Error uploading image: ' + err.message);
-                }
+                handleImageUpload(file);
             }
         };
     });

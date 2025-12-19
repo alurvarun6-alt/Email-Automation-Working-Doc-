@@ -1,5 +1,6 @@
 import smtplib
 import ssl
+import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
@@ -7,6 +8,9 @@ from pathlib import Path
 import re
 from html import unescape
 from config import IMAGE_FOLDER
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 def strip_html_tags(html_content):
@@ -72,10 +76,30 @@ def build_email_message(recipient, subject, html_template, sender_email):
 
     # Find and attach embedded images
     images_to_embed = find_embedded_images(html_template)
+    embedded_count = 0
+    failed_images = []
+
     for image_filename in images_to_embed:
         image_path = IMAGE_FOLDER / image_filename
-        if image_path.exists():
+        if not image_path.exists():
+            logger.warning(
+                f"Image not found for email to {email_addr}: {image_filename}. "
+                f"Email will be sent without this image."
+            )
+            failed_images.append(image_filename)
+            continue
+
+        try:
             with open(image_path, 'rb') as img_file:
+                image_data = img_file.read()
+
+                if len(image_data) == 0:
+                    logger.warning(
+                        f"Image file is empty for email to {email_addr}: {image_filename}"
+                    )
+                    failed_images.append(image_filename)
+                    continue
+
                 # Determine image type
                 ext = image_path.suffix.lower()
                 image_type = {
@@ -86,10 +110,35 @@ def build_email_message(recipient, subject, html_template, sender_email):
                     '.webp': 'webp'
                 }.get(ext, 'jpeg')
 
-                image_part = MIMEImage(img_file.read(), _subtype=image_type)
+                image_part = MIMEImage(image_data, _subtype=image_type)
                 image_part.add_header('Content-ID', f'<{image_filename}>')
                 image_part.add_header('Content-Disposition', 'inline', filename=image_filename)
                 message.attach(image_part)
+                embedded_count += 1
+
+        except PermissionError as e:
+            logger.error(
+                f"Permission denied reading image {image_filename} for email to {email_addr}: {e}"
+            )
+            failed_images.append(image_filename)
+
+        except IOError as e:
+            logger.error(
+                f"IO error reading image {image_filename} for email to {email_addr}: {e}"
+            )
+            failed_images.append(image_filename)
+
+        except Exception as e:
+            logger.error(
+                f"Unexpected error embedding image {image_filename} for email to {email_addr}: {e}"
+            )
+            failed_images.append(image_filename)
+
+    if images_to_embed:
+        logger.info(
+            f"Email to {email_addr}: embedded {embedded_count}/{len(images_to_embed)} images"
+            + (f" (failed: {', '.join(failed_images)})" if failed_images else "")
+        )
 
     return message
 

@@ -1,5 +1,8 @@
 import os
 import io
+import uuid
+import shutil
+import logging
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
@@ -11,9 +14,20 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
+# PIL for image validation
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+
 import config
 import database as db
 from email_sender import test_smtp_connection, test_all_configurations, send_emails
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -67,6 +81,98 @@ def allowed_file(filename, allowed_extensions):
     """Check if file has an allowed extension."""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
+
+def get_file_extension(filename):
+    """Get the lowercase file extension."""
+    if '.' in filename:
+        return filename.rsplit('.', 1)[1].lower()
+    return ''
+
+
+def validate_image_magic_bytes(file_data, extension):
+    """
+    Validate that file content matches expected magic bytes for the extension.
+    Returns (is_valid, error_message).
+    """
+    if extension not in config.IMAGE_MAGIC_BYTES:
+        return False, f"Unknown image type: {extension}"
+
+    magic_signatures = config.IMAGE_MAGIC_BYTES[extension]
+
+    for signature in magic_signatures:
+        if file_data[:len(signature)] == signature:
+            # Special check for WebP: verify 'WEBP' at offset 8
+            if extension == 'webp':
+                if len(file_data) >= 12 and file_data[8:12] == b'WEBP':
+                    return True, None
+            else:
+                return True, None
+
+    return False, "File content doesn't match its extension (possible file corruption or mislabeled file)"
+
+
+def validate_image_with_pil(file_data):
+    """
+    Use PIL to validate that the file is a valid, non-corrupted image.
+    Returns (is_valid, error_message, image_info).
+    """
+    if not PIL_AVAILABLE:
+        return True, None, {}  # Skip validation if PIL not available
+
+    try:
+        image = Image.open(io.BytesIO(file_data))
+        # Force load the image data to catch truncated files
+        image.load()
+
+        image_info = {
+            'format': image.format,
+            'size': image.size,
+            'mode': image.mode
+        }
+
+        # Check for reasonable dimensions (prevent decompression bombs)
+        width, height = image.size
+        if width > 10000 or height > 10000:
+            return False, f"Image dimensions too large ({width}x{height}). Maximum is 10000x10000.", None
+
+        # Check for reasonable pixel count
+        if width * height > 50000000:  # 50 megapixels
+            return False, "Image has too many pixels (over 50 megapixels)", None
+
+        return True, None, image_info
+
+    except Exception as e:
+        return False, f"Invalid or corrupted image file: {str(e)}", None
+
+
+def check_disk_space():
+    """
+    Check if there's enough disk space for uploads.
+    Returns (has_space, free_mb).
+    """
+    try:
+        total, used, free = shutil.disk_usage(config.IMAGE_FOLDER)
+        free_mb = free // (1024 * 1024)
+        return free_mb >= config.MIN_DISK_SPACE_MB, free_mb
+    except Exception as e:
+        logger.warning(f"Could not check disk space: {e}")
+        return True, -1  # Assume OK if we can't check
+
+
+def generate_unique_filename(original_filename):
+    """
+    Generate a unique filename using UUID to prevent collisions.
+    Format: YYYYMMDD_HHMMSS_<uuid8>_<original_name>
+    """
+    safe_name = secure_filename(original_filename)
+    if not safe_name:
+        safe_name = "image"
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    unique_id = uuid.uuid4().hex[:8]  # 8 character unique ID
+
+    return f"{timestamp}_{unique_id}_{safe_name}"
 
 
 # ============================================================================
@@ -515,29 +621,160 @@ def campaign_results(campaign_id):
 @app.route('/upload/image', methods=['POST'])
 @login_required
 def upload_image():
-    """Handle image upload from Quill editor."""
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image file'}), 400
+    """
+    Handle image upload from Quill editor with comprehensive validation and error handling.
 
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+    Validation steps:
+    1. Check file presence in request
+    2. Check filename is not empty
+    3. Check file extension is allowed
+    4. Check file size is within limits
+    5. Check disk space availability
+    6. Validate file content (magic bytes)
+    7. Validate image with PIL (if available)
+    8. Save file with error handling
 
-    if not allowed_file(file.filename, config.ALLOWED_IMAGE_EXTENSIONS):
-        return jsonify({'error': 'Invalid file type'}), 400
+    Returns JSON with 'url' on success or 'error' on failure.
+    """
+    try:
+        # Step 1: Check file presence
+        if 'image' not in request.files:
+            logger.warning("Upload attempt with no image file in request")
+            return jsonify({
+                'error': 'No image file provided',
+                'code': 'NO_FILE'
+            }), 400
 
-    # Generate unique filename
-    original_name = secure_filename(file.filename)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"{timestamp}_{original_name}"
+        file = request.files['image']
 
-    # Save file
-    filepath = config.IMAGE_FOLDER / filename
-    file.save(filepath)
+        # Step 2: Check filename
+        if file.filename == '':
+            logger.warning("Upload attempt with empty filename")
+            return jsonify({
+                'error': 'No file selected',
+                'code': 'EMPTY_FILENAME'
+            }), 400
 
-    # Return URL for Quill
-    image_url = url_for('uploaded_image', filename=filename)
-    return jsonify({'url': image_url})
+        # Step 3: Check extension
+        extension = get_file_extension(file.filename)
+        if not allowed_file(file.filename, config.ALLOWED_IMAGE_EXTENSIONS):
+            allowed = ', '.join(config.ALLOWED_IMAGE_EXTENSIONS)
+            logger.warning(f"Upload attempt with invalid extension: {extension}")
+            return jsonify({
+                'error': f'Invalid file type. Allowed types: {allowed}',
+                'code': 'INVALID_TYPE',
+                'allowed_types': list(config.ALLOWED_IMAGE_EXTENSIONS)
+            }), 400
+
+        # Step 4: Read file content and check size
+        file_data = file.read()
+        file_size = len(file_data)
+
+        if file_size == 0:
+            logger.warning("Upload attempt with empty file")
+            return jsonify({
+                'error': 'File is empty',
+                'code': 'EMPTY_FILE'
+            }), 400
+
+        if file_size > config.MAX_IMAGE_SIZE:
+            max_mb = config.MAX_IMAGE_SIZE / (1024 * 1024)
+            file_mb = file_size / (1024 * 1024)
+            logger.warning(f"Upload attempt with oversized file: {file_mb:.1f}MB")
+            return jsonify({
+                'error': f'File too large ({file_mb:.1f}MB). Maximum size is {max_mb:.0f}MB',
+                'code': 'FILE_TOO_LARGE',
+                'max_size_mb': max_mb,
+                'file_size_mb': round(file_mb, 1)
+            }), 400
+
+        # Step 5: Check disk space
+        has_space, free_mb = check_disk_space()
+        if not has_space:
+            logger.error(f"Insufficient disk space: {free_mb}MB free")
+            return jsonify({
+                'error': 'Server storage is full. Please try again later.',
+                'code': 'DISK_FULL',
+                'retry': True  # Client can retry later
+            }), 507  # 507 Insufficient Storage
+
+        # Step 6: Validate magic bytes
+        is_valid, error_msg = validate_image_magic_bytes(file_data, extension)
+        if not is_valid:
+            logger.warning(f"Magic byte validation failed for {file.filename}: {error_msg}")
+            return jsonify({
+                'error': error_msg,
+                'code': 'INVALID_CONTENT'
+            }), 400
+
+        # Step 7: Validate with PIL
+        is_valid, error_msg, image_info = validate_image_with_pil(file_data)
+        if not is_valid:
+            logger.warning(f"PIL validation failed for {file.filename}: {error_msg}")
+            return jsonify({
+                'error': error_msg,
+                'code': 'INVALID_IMAGE'
+            }), 400
+
+        # Step 8: Generate unique filename and save
+        filename = generate_unique_filename(file.filename)
+        filepath = config.IMAGE_FOLDER / filename
+
+        try:
+            # Write file with explicit error handling
+            with open(filepath, 'wb') as f:
+                f.write(file_data)
+
+            # Verify the file was written correctly
+            if not filepath.exists():
+                raise IOError("File was not created")
+
+            saved_size = filepath.stat().st_size
+            if saved_size != file_size:
+                filepath.unlink()  # Clean up incomplete file
+                raise IOError(f"File size mismatch: expected {file_size}, got {saved_size}")
+
+            logger.info(f"Successfully uploaded image: {filename} ({file_size} bytes)")
+
+            # Return success with URL
+            image_url = url_for('uploaded_image', filename=filename)
+            return jsonify({
+                'url': image_url,
+                'filename': filename,
+                'size': file_size,
+                'dimensions': image_info.get('size') if image_info else None
+            })
+
+        except PermissionError as e:
+            logger.error(f"Permission denied saving file: {e}")
+            return jsonify({
+                'error': 'Server cannot save files. Please contact support.',
+                'code': 'PERMISSION_DENIED',
+                'retry': False
+            }), 500
+
+        except IOError as e:
+            logger.error(f"IO error saving file: {e}")
+            # Clean up partial file if it exists
+            if filepath.exists():
+                try:
+                    filepath.unlink()
+                except Exception:
+                    pass
+            return jsonify({
+                'error': 'Failed to save file. Please try again.',
+                'code': 'SAVE_FAILED',
+                'retry': True
+            }), 500
+
+    except Exception as e:
+        # Catch-all for unexpected errors
+        logger.exception(f"Unexpected error in upload_image: {e}")
+        return jsonify({
+            'error': 'An unexpected error occurred. Please try again.',
+            'code': 'UNKNOWN_ERROR',
+            'retry': True
+        }), 500
 
 
 @app.route('/uploads/images/<filename>')
