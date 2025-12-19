@@ -815,12 +815,25 @@
         document.removeEventListener('mouseup', stopResize);
     }
 
-    // Handle click on images in editor
+    // Handle click on images in editor - use mousedown for better Quill compatibility
+    qlEditor.addEventListener('mousedown', (e) => {
+        if (e.target.tagName === 'IMG') {
+            e.preventDefault();
+            e.stopPropagation();
+            selectedImage = e.target;
+            // Small delay to ensure the click is processed after Quill
+            setTimeout(() => createResizeOverlay(e.target), 10);
+        }
+    });
+
+    // Also handle click as backup
     qlEditor.addEventListener('click', (e) => {
         if (e.target.tagName === 'IMG') {
-            selectedImage = e.target;
-            createResizeOverlay(e.target);
             e.stopPropagation();
+            if (!resizeOverlay) {
+                selectedImage = e.target;
+                createResizeOverlay(e.target);
+            }
         }
     });
 
