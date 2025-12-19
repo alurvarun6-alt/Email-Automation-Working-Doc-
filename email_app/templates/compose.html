@@ -815,27 +815,32 @@
         document.removeEventListener('mouseup', stopResize);
     }
 
-    // Handle click on images in editor - use mousedown for better Quill compatibility
-    qlEditor.addEventListener('mousedown', (e) => {
-        if (e.target.tagName === 'IMG') {
+    // Debug: Log when the image resize handler is set up
+    console.log('Image resize handler initialized. qlEditor:', qlEditor);
+
+    // Handle click on images in editor - use event delegation on document for reliability
+    document.addEventListener('mousedown', (e) => {
+        // Check if clicked element is an image inside the editor
+        if (e.target.tagName === 'IMG' && qlEditor.contains(e.target)) {
+            console.log('Image clicked!', e.target);
             e.preventDefault();
             e.stopPropagation();
             selectedImage = e.target;
-            // Small delay to ensure the click is processed after Quill
             setTimeout(() => createResizeOverlay(e.target), 10);
         }
-    });
+    }, true);  // Use capture phase
 
-    // Also handle click as backup
-    qlEditor.addEventListener('click', (e) => {
-        if (e.target.tagName === 'IMG') {
+    // Also handle click as backup with capture
+    document.addEventListener('click', (e) => {
+        if (e.target.tagName === 'IMG' && qlEditor.contains(e.target)) {
+            console.log('Image click backup triggered');
             e.stopPropagation();
             if (!resizeOverlay) {
                 selectedImage = e.target;
                 createResizeOverlay(e.target);
             }
         }
-    });
+    }, true);  // Use capture phase
 
     // Remove overlay when clicking outside
     document.addEventListener('click', (e) => {
