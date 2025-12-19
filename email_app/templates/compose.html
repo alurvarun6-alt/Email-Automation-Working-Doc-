@@ -358,6 +358,7 @@
                     const response = await fetch('/upload/image', {
                         method: 'POST',
                         body: formData,
+                        credentials: 'include',
                         headers: {
                             'X-Requested-With': 'XMLHttpRequest'
                         }
@@ -396,7 +397,9 @@
         }
 
         try {
-            const response = await fetch(`/api/template/${templateId}`);
+            const response = await fetch(`/api/template/${templateId}`, {
+                credentials: 'include'
+            });
             const data = await response.json();
 
             if (data.error) {
@@ -463,9 +466,7 @@
             const response = await fetch('/compose/preview', {
                 method: 'POST',
                 body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
+                credentials: 'include'
             });
 
             if (!response.ok) {

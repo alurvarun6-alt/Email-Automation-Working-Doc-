@@ -366,9 +366,8 @@ def compose():
 
 
 @app.route('/compose/preview', methods=['POST'])
-@login_required
 def compose_preview():
-    """Preview email with sample data."""
+    """Preview email with sample data (no login required - just text substitution)."""
     html_content = request.form.get('html_content', '')
     # Replace placeholder with sample name
     preview_html = html_content.replace('{{name}}', 'Sample Recipient')
