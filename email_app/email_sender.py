@@ -1,5 +1,7 @@
 import smtplib
 import ssl
+import base64
+import hashlib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
@@ -26,18 +28,48 @@ def strip_html_tags(html_content):
     return text.strip()
 
 
-def find_embedded_images(html_content):
-    """Find all image references in HTML that need to be embedded."""
+def find_base64_images(html_content):
+    """Find all base64 data URL images in HTML."""
+    # Match src="data:image/...;base64,..." pattern
+    pattern = r'src=["\']data:image/([^;]+);base64,([^"\']+)["\']'
+    matches = re.findall(pattern, html_content)
+    # Return list of (image_type, base64_data, unique_id)
+    results = []
+    for i, (img_type, b64_data) in enumerate(matches):
+        # Create a unique ID based on content hash
+        content_hash = hashlib.md5(b64_data[:100].encode()).hexdigest()[:8]
+        unique_id = f"img{i}_{content_hash}.{img_type}"
+        results.append({
+            'type': img_type,
+            'data': b64_data,
+            'cid': unique_id
+        })
+    return results
+
+
+def find_file_images(html_content):
+    """Find all file-based image references in HTML."""
     # Match src="/uploads/images/filename.ext" pattern
     pattern = r'src=["\']/?uploads/images/([^"\']+)["\']'
     matches = re.findall(pattern, html_content)
-    return list(set(matches))  # Remove duplicates
+    return list(set(matches))
 
 
-def prepare_html_for_sending(html_content, images_to_embed):
-    """Replace image URLs with Content-ID references for embedding."""
+def prepare_html_with_cid(html_content, base64_images):
+    """Replace base64 data URLs with Content-ID references."""
     processed_html = html_content
-    for image_filename in images_to_embed:
+    for img in base64_images:
+        # Replace the data URL with cid: reference
+        pattern = rf'src=["\']data:image/{re.escape(img["type"])};base64,{re.escape(img["data"])}["\']'
+        replacement = f'src="cid:{img["cid"]}"'
+        processed_html = re.sub(pattern, replacement, processed_html)
+    return processed_html
+
+
+def prepare_html_for_sending(html_content, file_images):
+    """Replace file image URLs with Content-ID references for embedding."""
+    processed_html = html_content
+    for image_filename in file_images:
         # Replace the URL with cid: reference
         pattern = rf'src=["\']/?uploads/images/{re.escape(image_filename)}["\']'
         replacement = f'src="cid:{image_filename}"'
@@ -45,7 +77,7 @@ def prepare_html_for_sending(html_content, images_to_embed):
     return processed_html
 
 
-def build_email_message(recipient, subject, html_template, sender_email):
+def build_email_message(recipient, subject, html_template, sender_email, base64_images=None, file_images=None):
     """Build a MIME email message for a recipient."""
     email_addr = recipient['email']
     display_name = recipient['display_name']
@@ -70,26 +102,40 @@ def build_email_message(recipient, subject, html_template, sender_email):
     # HTML version
     alternative.attach(MIMEText(personalized_html, 'html', 'utf-8'))
 
-    # Find and attach embedded images
-    images_to_embed = find_embedded_images(html_template)
-    for image_filename in images_to_embed:
-        image_path = IMAGE_FOLDER / image_filename
-        if image_path.exists():
-            with open(image_path, 'rb') as img_file:
-                # Determine image type
-                ext = image_path.suffix.lower()
-                image_type = {
-                    '.jpg': 'jpeg',
-                    '.jpeg': 'jpeg',
-                    '.png': 'png',
-                    '.gif': 'gif',
-                    '.webp': 'webp'
-                }.get(ext, 'jpeg')
+    # Attach base64 images as CID embedded images
+    if base64_images:
+        for img in base64_images:
+            try:
+                # Decode base64 data
+                image_data = base64.b64decode(img['data'])
+                image_type = img['type'] if img['type'] != 'jpg' else 'jpeg'
 
-                image_part = MIMEImage(img_file.read(), _subtype=image_type)
-                image_part.add_header('Content-ID', f'<{image_filename}>')
-                image_part.add_header('Content-Disposition', 'inline', filename=image_filename)
+                image_part = MIMEImage(image_data, _subtype=image_type)
+                image_part.add_header('Content-ID', f'<{img["cid"]}>')
+                image_part.add_header('Content-Disposition', 'inline', filename=img['cid'])
                 message.attach(image_part)
+            except Exception as e:
+                print(f"Error attaching image: {e}")
+
+    # Attach file-based images
+    if file_images:
+        for image_filename in file_images:
+            image_path = IMAGE_FOLDER / image_filename
+            if image_path.exists():
+                with open(image_path, 'rb') as img_file:
+                    ext = image_path.suffix.lower()
+                    image_type = {
+                        '.jpg': 'jpeg',
+                        '.jpeg': 'jpeg',
+                        '.png': 'png',
+                        '.gif': 'gif',
+                        '.webp': 'webp'
+                    }.get(ext, 'jpeg')
+
+                    image_part = MIMEImage(img_file.read(), _subtype=image_type)
+                    image_part.add_header('Content-ID', f'<{image_filename}>')
+                    image_part.add_header('Content-Disposition', 'inline', filename=image_filename)
+                    message.attach(image_part)
 
     return message
 
@@ -179,9 +225,13 @@ def send_emails(smtp_config, recipients, subject, html_content, progress_callbac
         'results': []
     }
 
-    # Find images and prepare HTML
-    images_to_embed = find_embedded_images(html_content)
-    prepared_html = prepare_html_for_sending(html_content, images_to_embed)
+    # Find base64 images and convert to CID references
+    base64_images = find_base64_images(html_content)
+    prepared_html = prepare_html_with_cid(html_content, base64_images)
+
+    # Also handle any file-based images
+    file_images = find_file_images(prepared_html)
+    prepared_html = prepare_html_for_sending(prepared_html, file_images)
 
     try:
         # Establish SMTP connection
@@ -221,7 +271,9 @@ def send_emails(smtp_config, recipients, subject, html_content, progress_callbac
                     recipient,
                     subject,
                     prepared_html,
-                    smtp_config['username']
+                    smtp_config['username'],
+                    base64_images=base64_images,
+                    file_images=file_images
                 )
                 server.sendmail(
                     smtp_config['username'],
