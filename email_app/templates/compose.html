@@ -338,7 +338,63 @@
         });
     }
 
-    // Handle image upload
+    // Helper function to upload image and insert into editor
+    async function uploadAndInsertImage(file) {
+        try {
+            const processedFile = await compressImage(file);
+
+            const formData = new FormData();
+            formData.append('image', processedFile);
+
+            const response = await fetch('/upload/image', {
+                method: 'POST',
+                body: formData,
+                credentials: 'include',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    alert('Your session has expired. Please log in again.');
+                    window.location.href = '/login';
+                    return;
+                }
+                throw new Error('Server error: ' + response.status);
+            }
+
+            const data = await response.json();
+            if (data.url) {
+                const range = quill.getSelection(true);
+                quill.insertEmbed(range ? range.index : 0, 'image', data.url);
+            } else {
+                alert('Error uploading image: ' + (data.error || 'Unknown error'));
+            }
+        } catch (err) {
+            alert('Error uploading image: ' + err.message);
+        }
+    }
+
+    // Handle pasted images - intercept and process through our upload
+    quill.root.addEventListener('paste', function(e) {
+        const clipboardData = e.clipboardData || window.clipboardData;
+        if (!clipboardData) return;
+
+        const items = clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                e.preventDefault();
+                const file = items[i].getAsFile();
+                if (file) {
+                    uploadAndInsertImage(file);
+                }
+                return;
+            }
+        }
+    });
+
+    // Handle image upload from toolbar button
     quill.getModule('toolbar').addHandler('image', function() {
         const input = document.createElement('input');
         input.setAttribute('type', 'file');
@@ -348,42 +404,7 @@
         input.onchange = async function() {
             const file = input.files[0];
             if (file) {
-                try {
-                    // Compress image if needed
-                    const processedFile = await compressImage(file);
-
-                    const formData = new FormData();
-                    formData.append('image', processedFile);
-
-                    const response = await fetch('/upload/image', {
-                        method: 'POST',
-                        body: formData,
-                        credentials: 'include',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        if (response.status === 401) {
-                            alert('Your session has expired. Please log in again.');
-                            window.location.href = '/login';
-                            return;
-                        }
-                        throw new Error('Server error: ' + response.status);
-                    }
-
-                    const data = await response.json();
-
-                    if (data.url) {
-                        const range = quill.getSelection(true);
-                        quill.insertEmbed(range.index, 'image', data.url);
-                    } else {
-                        alert('Error uploading image: ' + (data.error || 'Unknown error'));
-                    }
-                } catch (err) {
-                    alert('Error uploading image: ' + err.message);
-                }
+                await uploadAndInsertImage(file);
             }
         };
     });
