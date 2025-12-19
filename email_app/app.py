@@ -29,8 +29,10 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         # Check if this is an AJAX request
+        # Note: FormData sets content-type as 'multipart/form-data; boundary=...'
+        is_multipart = request.content_type and request.content_type.startswith('multipart/form-data')
         is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
-                  request.content_type == 'multipart/form-data' or \
+                  is_multipart or \
                   request.accept_mimetypes.best == 'application/json'
 
         if 'smtp_username' not in session:

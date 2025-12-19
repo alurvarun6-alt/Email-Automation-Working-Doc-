@@ -309,8 +309,21 @@
                 try {
                     const response = await fetch('/upload/image', {
                         method: 'POST',
-                        body: formData
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
                     });
+
+                    if (!response.ok) {
+                        if (response.status === 401) {
+                            alert('Your session has expired. Please log in again.');
+                            window.location.href = '/login';
+                            return;
+                        }
+                        throw new Error('Server error: ' + response.status);
+                    }
+
                     const data = await response.json();
 
                     if (data.url) {
@@ -401,10 +414,22 @@
 
             const response = await fetch('/compose/preview', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
             });
-            const data = await response.json();
 
+            if (!response.ok) {
+                if (response.status === 401) {
+                    alert('Your session has expired. Please log in again.');
+                    window.location.href = '/login';
+                    return;
+                }
+                throw new Error('Server error: ' + response.status);
+            }
+
+            const data = await response.json();
             document.getElementById('preview_body').innerHTML = data.html;
             document.getElementById('preview_modal').classList.add('active');
         } catch (err) {
