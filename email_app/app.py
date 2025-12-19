@@ -28,7 +28,14 @@ def login_required(f):
     """Decorator to require login for routes."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Check if this is an AJAX request
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+                  request.content_type == 'multipart/form-data' or \
+                  request.accept_mimetypes.best == 'application/json'
+
         if 'smtp_username' not in session:
+            if is_ajax:
+                return jsonify({'error': 'Please log in again'}), 401
             flash('Please log in to continue.', 'warning')
             return redirect(url_for('login'))
         # Check session timeout
@@ -36,6 +43,8 @@ def login_required(f):
             login_time = datetime.fromisoformat(session['login_time'])
             if datetime.now() - login_time > timedelta(seconds=config.SESSION_TIMEOUT):
                 session.clear()
+                if is_ajax:
+                    return jsonify({'error': 'Session expired. Please log in again'}), 401
                 flash('Session expired. Please log in again.', 'warning')
                 return redirect(url_for('login'))
         return f(*args, **kwargs)
@@ -574,8 +583,11 @@ if __name__ == '__main__':
     # Ensure database is initialized
     db.init_db()
 
-    # Get port from environment (Railway sets this) or default to 5000
-    port = int(os.environ.get('PORT', 5000))
+    # Use port 5001 by default (5000 conflicts with Mac AirPlay)
+    port = int(os.environ.get('PORT', 5001))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+
+    print(f"\n✓ Email Tool is running!")
+    print(f"✓ Open your browser to: http://localhost:{port}\n")
 
     app.run(debug=debug, host='0.0.0.0', port=port)

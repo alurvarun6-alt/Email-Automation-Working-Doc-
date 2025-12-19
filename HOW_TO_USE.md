@@ -1,92 +1,64 @@
-# Email Automation Tool - Setup Guide
+# Email Tool - Quick Start Guide
 
-## One-Time Setup (5 minutes)
+## First Time Setup (5 minutes, do once)
 
 ### Step 1: Install Python
-
-**Mac:**
-1. Open Terminal (press Cmd + Space, type "Terminal", press Enter)
-2. Copy and paste this command, then press Enter:
-   ```
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-   ```
-3. When that finishes, run:
-   ```
-   brew install python3
-   ```
-
-**Windows:**
-1. Go to https://www.python.org/downloads/
-2. Click "Download Python 3.x.x"
-3. Run the installer
-4. **IMPORTANT:** Check the box that says "Add Python to PATH"
+1. Go to **https://www.python.org/downloads/**
+2. Click the yellow **"Download Python"** button
+3. Open the downloaded file
+4. **Check the box: "Add Python to PATH"** ← Important!
 5. Click "Install Now"
-6. Restart your computer
+6. Restart your computer when done
 
-### Step 2: Download the Tool
-
-1. Download this folder to your computer
-2. Put it somewhere easy to find (like your Desktop)
+### Step 2: Get the Email Tool
+1. Download this folder
+2. Unzip it to your Desktop
 
 ---
 
-## Using the Tool
+## Every Time You Use It
 
-### Starting the Tool
+### Start the Tool
+1. Open the folder
+2. **Double-click** `Start_Email_Tool.command` (Mac) or `Start_Email_Tool.bat` (Windows)
+3. Mac users: If asked for permission, click "Open"
+4. Keep the black window open!
+5. Browser opens automatically to http://localhost:5001
 
-**Mac:**
-1. Double-click `Start_Email_Tool.command`
-2. If asked "Are you sure you want to open it?", click "Open"
-3. Your browser will open automatically
+### Log In
+- **Email:** yourname@wunderkind-pr.com
+- **Password:** Your email password
+- Click "Sign In"
 
-**Windows:**
-1. Double-click `Start_Email_Tool.bat`
-2. Your browser will open automatically
+### Send Emails
+1. Click **"Compose"**
+2. Enter campaign name (for your records)
+3. Enter subject line
+4. Write your email (use `{{name}}` for personalization)
+5. Upload CSV file
+6. Click **"Send Emails"**
 
-### Logging In
+### Stop
+Close the black window.
 
-1. Enter your Wunderkind email (e.g., `yourname@wunderkind-pr.com`)
-2. Enter your email password (same one you use to check email)
-3. Click "Sign In"
+---
 
-### Sending Emails
+## CSV File Format
 
-1. Click "Compose" or "New Campaign"
-2. Enter a campaign name (for your records)
-3. Enter the email subject line
-4. Write your email in the text editor
-   - Use the toolbar to bold, italicize, add images, etc.
-   - Type `{{name}}` where you want the recipient's name to appear
-5. Upload your CSV file with recipients
-6. Click "Send Emails"
-
-### CSV File Format
-
-Your CSV file should have these columns:
+Save as .csv with these columns:
 ```
 Name,Email,Company
-John Smith,john@example.com,Example News
-Jane Doe,jane@newspaper.com,Daily Times
-,editor@magazine.com,Literary Magazine
+John Smith,john@news.com,Daily News
+,editor@mag.com,Magazine Inc
 ```
-
-- **Name** - Person's name (optional - if empty, Company will be used)
-- **Email** - Email address (required)
-- **Company** - Company name (optional - used if Name is empty)
-
-### Stopping the Tool
-
-Just close the black terminal/command window.
 
 ---
 
-## Troubleshooting
+## Problems?
 
-### "Python is not installed"
-Follow Step 1 above to install Python.
-
-### "Connection timed out" or login fails
-Make sure you're connected to the internet and your email/password are correct.
-
-### Other issues
-Contact your administrator with a screenshot of the error.
+| Issue | Solution |
+|-------|----------|
+| "Python not installed" | Do Step 1 above |
+| Page won't load | Wait 5 sec, click Reload |
+| Login fails | Check email/password |
+| Mac blocks the file | Right-click → Open |
