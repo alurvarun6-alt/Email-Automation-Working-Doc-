@@ -670,7 +670,7 @@
     // Image Resize and Alignment Handler
     // ============================================================================
     const editorContainer = document.querySelector('.editor-container');
-    const qlEditor = document.querySelector('.ql-editor');
+    const qlEditor = quill.root;  // Use quill.root directly instead of querySelector
     let selectedImage = null;
     let resizeOverlay = null;
     let isResizing = false;
