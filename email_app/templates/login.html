@@ -7,7 +7,7 @@
 {% block content %}
 <div style="text-align: center; margin-bottom: 2rem; margin-top: 2rem;">
     <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem;">Email Automation</h1>
-    <p style="color: #6b7280;">Sign in with your email credentials to get started</p>
+    <p style="color: #6b7280;">Sign in with your Wunderkind email credentials</p>
 </div>
 
 <div class="card">
@@ -19,7 +19,7 @@
                 id="email"
                 name="email"
                 class="form-input"
-                placeholder="you@company.com"
+                placeholder="yourname@wunderkind-pr.com"
                 value="{{ email if email else '' }}"
                 required
             >
@@ -35,56 +35,64 @@
                 placeholder="Your email password"
                 required
             >
+            <p class="form-hint">Same password you use to log into your email</p>
         </div>
 
-        <div class="form-group">
-            <label class="form-label" for="host">SMTP Server</label>
-            <input
-                type="text"
-                id="host"
-                name="host"
-                class="form-input"
-                placeholder="mail.company.com"
-                value="{{ host if host else '' }}"
-                required
-            >
-            <p class="form-hint">Your company's mail server address</p>
-        </div>
+        <!-- Pre-filled settings (hidden by default, can show for troubleshooting) -->
+        <input type="hidden" name="host" value="{{ host if host else 'mail.wunderkind-pr.com' }}">
+        <input type="hidden" name="port" value="{{ port if port else '25' }}">
+        <input type="hidden" name="use_tls" value="">
+        <input type="hidden" name="use_ssl" value="">
 
-        <div class="form-group">
-            <label class="form-label" for="port">Port</label>
-            <input
-                type="number"
-                id="port"
-                name="port"
-                class="form-input"
-                placeholder="587"
-                value="{{ port if port else '587' }}"
-            >
-        </div>
+        <details style="margin-bottom: 1rem;">
+            <summary style="cursor: pointer; color: #6b7280; font-size: 0.875rem;">Advanced Settings (usually not needed)</summary>
+            <div style="margin-top: 1rem; padding: 1rem; background: #f9fafb; border-radius: 8px;">
+                <div class="form-group">
+                    <label class="form-label" for="host_visible">SMTP Server</label>
+                    <input
+                        type="text"
+                        id="host_visible"
+                        class="form-input"
+                        placeholder="mail.wunderkind-pr.com"
+                        value="{{ host if host else 'mail.wunderkind-pr.com' }}"
+                        onchange="document.querySelector('input[name=host]').value = this.value"
+                    >
+                </div>
 
-        <div class="form-group">
-            <div class="form-check">
-                <input
-                    type="checkbox"
-                    id="use_tls"
-                    name="use_tls"
-                    checked
-                >
-                <label for="use_tls">Use TLS (recommended)</label>
+                <div class="form-group">
+                    <label class="form-label" for="port_visible">Port</label>
+                    <input
+                        type="number"
+                        id="port_visible"
+                        class="form-input"
+                        value="{{ port if port else '25' }}"
+                        onchange="document.querySelector('input[name=port]').value = this.value"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <div class="form-check">
+                        <input
+                            type="checkbox"
+                            id="use_tls_visible"
+                            onchange="document.querySelector('input[name=use_tls]').value = this.checked ? 'on' : ''"
+                        >
+                        <label for="use_tls_visible">Use TLS</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="form-check">
+                        <input
+                            type="checkbox"
+                            id="use_ssl_visible"
+                            onchange="document.querySelector('input[name=use_ssl]').value = this.checked ? 'on' : ''"
+                        >
+                        <label for="use_ssl_visible">Use SSL</label>
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <div class="form-group">
-            <div class="form-check">
-                <input
-                    type="checkbox"
-                    id="use_ssl"
-                    name="use_ssl"
-                >
-                <label for="use_ssl">Use SSL (for port 465)</label>
-            </div>
-        </div>
+        </details>
 
         <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">
             Sign In
@@ -92,7 +100,7 @@
     </form>
 </div>
 
-<div style="text-align: center; color: #6b7280; font-size: 0.875rem;">
-    <p>Use the same credentials you use to log into your email</p>
+<div style="text-align: center; color: #6b7280; font-size: 0.875rem; margin-top: 1rem;">
+    <p>Having trouble? Contact your administrator.</p>
 </div>
 {% endblock %}
