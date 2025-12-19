@@ -1,6 +1,7 @@
 @echo off
+echo.
 echo ============================================
-echo    Email Automation Tool - Starting...
+echo    Email Automation Tool
 echo ============================================
 echo.
 
@@ -11,12 +12,8 @@ python --version >nul 2>&1
 if errorlevel 1 (
     echo ERROR: Python is not installed!
     echo.
-    echo Please install Python:
-    echo 1. Go to https://www.python.org/downloads/
-    echo 2. Download and run the installer
-    echo 3. IMPORTANT: Check "Add Python to PATH" during installation
-    echo 4. Restart your computer
-    echo 5. Run this script again
+    echo Please install Python from: https://www.python.org/downloads/
+    echo IMPORTANT: Check "Add Python to PATH" during installation
     echo.
     pause
     exit /b 1
@@ -24,29 +21,30 @@ if errorlevel 1 (
 
 :: Install dependencies if needed
 if not exist ".deps_installed" (
-    echo Installing dependencies (first time only)...
-    pip install -r requirements.txt
+    echo Installing dependencies (first time only, please wait)...
+    echo.
+    pip install -r requirements.txt --quiet
     if errorlevel 1 (
         echo ERROR: Failed to install dependencies
         pause
         exit /b 1
     )
     echo. > .deps_installed
-    echo Dependencies installed successfully!
+    echo Dependencies installed!
     echo.
 )
 
 echo Starting the Email Tool...
 echo.
 echo ============================================
-echo    The tool will open in your browser.
+echo    Opening browser to: http://localhost:5001
 echo    Keep this window open while using it.
 echo    Close this window when you're done.
 echo ============================================
 echo.
 
-:: Open browser after a short delay
-start "" "http://localhost:5000"
+:: Open browser
+start "" "http://localhost:5001"
 
 :: Start the Flask app
 python app.py
